@@ -1,0 +1,349 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  addDoc, 
+  onSnapshot, 
+  updateDoc, 
+  deleteDoc,
+  query
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  Plus, 
+  Search, 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle, 
+  Wrench, 
+  Trash2, 
+  X,
+  Laptop,
+  Activity,
+  ClipboardList,
+  FileText,
+  Printer,
+  Image as ImageIcon,
+  LayoutDashboard,
+  Download,
+  Share2,
+  Smartphone
+} from 'lucide-react';
+
+// --- Firebase Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'tech-logbook-pro-v2';
+
+const POPULAR_BRANDS = ["HP", "Dell", "Lenovo", "Apple", "Asus", "Acer", "Microsoft", "MSI", "Samsung", "Gigabyte"];
+const STATUS_OPTIONS = ["Received", "In Diagnosis", "Parts Pending", "Repairing", "Ready for Pickup", "Completed"];
+const CONDITION_PRESETS = [
+  "Dead / No Power", "Cracked Screen", "Liquid Damage", "BSOD / Software", 
+  "Slow / Hanging", "Battery/Charging", "Overheating", "Data Recovery", "Upgrade (SSD/RAM)"
+];
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [reportLog, setReportLog] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('workshop'); 
+
+  const [formData, setFormData] = useState({
+    customerName: '', customerPhone: '', brand: 'HP', otherBrand: '',
+    model: 'Pavilion G5', serialNumber: '', os: 'Windows 11', initialCondition: 'Dead / No Power',
+    otherCondition: '', stepsTaken: '', status: 'Received', image: null
+  });
+
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    return onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = collection(db, 'artifacts', appId, 'users', user.uid, 'repairs');
+    return onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setLogs(docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+    }, (err) => console.error(err));
+  }, [user]);
+
+  const stats = useMemo(() => {
+    const active = logs.filter(l => l.status !== 'Completed');
+    return {
+      total: active.length,
+      urgent: active.filter(l => l.status === 'Received' || l.status === 'In Diagnosis').length,
+      ready: active.filter(l => l.status === 'Ready for Pickup').length
+    };
+  }, [logs]);
+
+  const wrapText = (ctx, text, maxWidth) => {
+    let words = (text || '').split(' '); 
+    let lines = []; 
+    let currentLine = words[0] || '';
+    for (let i = 1; i < words.length; i++) {
+        let word = words[i];
+        let width = ctx.measureText(currentLine + " " + word).width;
+        if (width < maxWidth) { currentLine += " " + word; } 
+        else { lines.push(currentLine); currentLine = word; }
+    }
+    lines.push(currentLine); return lines;
+  };
+
+  const roundRect = (ctx, x, y, width, height, radius, fill) => {
+    ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath();
+    if (fill) ctx.fill();
+  };
+
+  const generateAndDownloadImage = (log) => {
+    if (!log) return;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 800; canvas.height = 1000;
+    
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 800, 1000);
+    ctx.fillStyle = '#4f46e5'; ctx.fillRect(0, 0, 800, 20);
+    
+    ctx.fillStyle = '#1e293b'; ctx.font = 'bold 44px sans-serif'; ctx.fillText('SERVICE RECEIPT', 40, 90);
+    ctx.fillStyle = '#6366f1'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('TECHLOG PROFESSIONAL CLOUD SYSTEMS', 40, 125);
+    
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 12px monospace';
+    ctx.fillText(`JOB ID: #${log.id.slice(-8).toUpperCase()}`, 760, 90);
+    ctx.textAlign = 'left';
+
+    ctx.fillStyle = '#f8fafc'; roundRect(ctx, 40, 160, 720, 80, 20, true);
+    ctx.fillStyle = '#1e293b'; ctx.font = 'bold 24px sans-serif'; ctx.fillText(log.status.toUpperCase(), 70, 210);
+    
+    ctx.fillStyle = '#4f46e5'; ctx.font = 'bold 12px sans-serif'; 
+    ctx.fillText('CUSTOMER', 40, 290); ctx.fillText('DEVICE SPECIFICATION', 400, 290);
+    
+    ctx.fillStyle = '#0f172a'; ctx.font = 'bold 24px sans-serif';
+    ctx.fillText(log.customerName, 40, 325); 
+    ctx.fillText(`${log.brand} ${log.model}`, 400, 325);
+    
+    ctx.fillStyle = '#64748b'; ctx.font = '16px sans-serif';
+    ctx.fillText(log.customerPhone || 'Contact Not Provided', 40, 355);
+    ctx.fillText(`S/N: ${log.serialNumber || 'N/A'}`, 400, 355);
+
+    ctx.fillStyle = '#fffbeb'; roundRect(ctx, 40, 400, 720, 110, 20, true);
+    ctx.fillStyle = '#92400e'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('FAULT REPORTED', 70, 435);
+    ctx.fillStyle = '#78350f'; ctx.font = 'italic 20px sans-serif'; ctx.fillText(`"${log.initialCondition}"`, 70, 475);
+
+    ctx.fillStyle = '#f1f5f9'; roundRect(ctx, 40, 540, 720, 360, 20, true);
+    ctx.fillStyle = '#4f46e5'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('TECHNICAL NOTES & PARTS', 70, 575);
+    
+    ctx.fillStyle = '#334155'; ctx.font = '16px monospace';
+    const lines = wrapText(ctx, log.stepsTaken || 'Diagnosis ongoing / No notes yet.', 660);
+    lines.forEach((l, i) => ctx.fillText(l, 70, 615 + (i * 28)));
+
+    ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('OFFICIAL DIGITAL RECEIPT • GENERATED BY TECHLOG PRO MOBILE', 40, 965);
+
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `Receipt_${log.customerName.replace(/\s+/g, '_')}_${log.model}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error("Image generation failed", e);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault(); if (!user) return;
+    const finalBrand = formData.brand === 'Other' ? formData.otherBrand : formData.brand;
+    const payload = { ...formData, brand: finalBrand, updatedAt: new Date() };
+    delete payload.otherBrand; delete payload.otherCondition;
+    
+    if (selectedLog) {
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'repairs', selectedLog.id), payload);
+    } else {
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'repairs'), { ...payload, createdAt: new Date() });
+    }
+    setIsModalOpen(false); setSelectedLog(null);
+  };
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(l => {
+      const search = searchTerm.toLowerCase();
+      const matchesSearch = (l.customerName + l.brand + l.model + l.serialNumber + l.customerPhone).toLowerCase().includes(search);
+      const isComplete = l.status === 'Completed';
+      return matchesSearch && (activeTab === 'history' ? isComplete : !isComplete);
+    });
+  }, [logs, searchTerm, activeTab]);
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-white"><Activity className="animate-spin text-indigo-600" size={40}/></div>;
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100">
+      {/* Header */}
+      <nav className="bg-white border-b px-6 py-4 sticky top-0 z-40 flex flex-col md:flex-row gap-4 items-center justify-between print:hidden shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="bg-indigo-600 p-2.5 rounded-2xl shadow-lg shadow-indigo-200"><Wrench className="text-white" size={20}/></div>
+          <h1 className="text-xl font-black tracking-tight text-slate-800 uppercase">TechLog<span className="text-indigo-600 font-black">Pro</span></h1>
+        </div>
+        
+        <div className="relative w-full md:w-1/3">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+          <input 
+            className="w-full pl-12 pr-4 py-3 bg-slate-100 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-bold text-sm" 
+            placeholder="Search by name, model (G5), or S/N..." 
+            value={searchTerm} 
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 print:hidden">
+        {/* Mobile-Friendly Stats */}
+        {activeTab === 'workshop' && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 flex items-center gap-4 shadow-sm">
+              <div className="bg-blue-50 p-3 rounded-2xl text-blue-600"><Activity size={22}/></div>
+              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Jobs</p><p className="text-xl font-black">{stats.total}</p></div>
+            </div>
+            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 flex items-center gap-4 shadow-sm">
+              <div className="bg-rose-50 p-3 rounded-2xl text-rose-600"><AlertCircle size={22}/></div>
+              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incoming</p><p className="text-xl font-black">{stats.urgent}</p></div>
+            </div>
+            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 flex items-center gap-4 shadow-sm">
+              <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-600"><CheckCircle2 size={22}/></div>
+              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ready</p><p className="text-xl font-black">{stats.ready}</p></div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Navigation */}
+        <div className="flex gap-8 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
+          <button onClick={() => setActiveTab('workshop')} className={`pb-4 font-black text-xs uppercase tracking-widest flex items-center gap-2 whitespace-nowrap transition-all relative ${activeTab === 'workshop' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <LayoutDashboard size={16}/> Workshop View
+            {activeTab === 'workshop' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full"/>}
+          </button>
+          <button onClick={() => setActiveTab('history')} className={`pb-4 font-black text-xs uppercase tracking-widest flex items-center gap-2 whitespace-nowrap transition-all relative ${activeTab === 'history' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <CheckCircle2 size={16}/> Repair History
+            {activeTab === 'history' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full"/>}
+          </button>
+        </div>
+
+        {/* List/Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredLogs.map(log => (
+            <div key={log.id} onClick={() => { setSelectedLog(log); setFormData(log); setIsModalOpen(true); }} className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group flex flex-col h-full active:scale-[0.98]">
+              <div className="flex justify-between items-start mb-4">
+                <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${log.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : log.status === 'Ready for Pickup' ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                  {log.status}
+                </span>
+                <div className="flex gap-2">
+                  <button onClick={e => { e.stopPropagation(); generateAndDownloadImage(log); }} className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-90" title="Save Image to Phone">
+                    <Download size={18}/>
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); setReportLog(log); setIsReportOpen(true); }} className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-90" title="View Report">
+                    <FileText size={18}/>
+                  </button>
+                </div>
+              </div>
+              <h3 className="text-xl font-black text-slate-800 truncate mb-1">{log.customerName}</h3>
+              <div className="flex items-center gap-2 text-indigo-600 font-bold text-[11px] uppercase tracking-widest mb-4">
+                <Laptop size={14}/> {log.brand} {log.model}
+              </div>
+              <div className="bg-slate-50 p-5 rounded-3xl text-xs font-medium text-slate-500 italic line-clamp-2 min-h-[64px] flex-grow border border-slate-100 leading-relaxed">
+                "{log.initialCondition}"
+              </div>
+              <div className="mt-5 pt-5 border-t flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="flex items-center gap-1.5"><Clock size={12}/> {log.updatedAt?.toDate ? new Date(log.updatedAt.toDate()).toLocaleDateString() : 'Active'}</div>
+                <div className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">Edit Details →</div>
+              </div>
+            </div>
+          ))}
+          {filteredLogs.length === 0 && (
+            <div className="col-span-full py-24 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-200">
+               <ClipboardList className="mx-auto text-slate-200 mb-6" size={64}/>
+               <p className="font-black text-slate-400 uppercase tracking-[0.2em] text-sm">No technician logs found</p>
+               <p className="text-xs text-slate-300 mt-2">Start a new repair using the button below</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Floating Action Button - Enhanced for Touch */}
+      <button onClick={() => { 
+        setFormData({ customerName: '', customerPhone: '', brand: 'HP', otherBrand: '', model: 'Pavilion G5', serialNumber: '', os: 'Windows 11', initialCondition: 'Dead / No Power', otherCondition: '', stepsTaken: '', status: 'Received', image: null });
+        setSelectedLog(null); setIsModalOpen(true); 
+      }} className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-[2rem] shadow-2xl shadow-indigo-300 flex items-center justify-center hover:scale-110 active:scale-90 transition-all z-50 ring-4 ring-white">
+        <Plus size={36} strokeWidth={3}/>
+      </button>
+
+      {/* MODAL: Intake/Edit */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[60] flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="bg-white w-full max-w-2xl h-[92vh] md:h-auto md:max-h-[90vh] rounded-t-[3rem] md:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-10 duration-300">
+            <div className="p-8 border-b flex justify-between items-center bg-white sticky top-0 z-10">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800">{selectedLog ? 'Update Entry' : 'New Repair Job'}</h2>
+                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-1">Job Intake Protocol</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-colors"><X size={24}/></button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-8 overflow-y-auto space-y-8 flex-grow">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Customer Name</label>
+                  <input required className="w-full p-4 bg-slate-100 border-none rounded-2xl font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all" value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="Full Name" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+                  <input className="w-full p-4 bg-slate-100 border-none rounded-2xl font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all" value={formData.customerPhone} onChange={e => setFormData({...formData, customerPhone: e.target.value})} placeholder="+234..." />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Device Model</label>
+                  <input required className="w-full p-4 bg-slate-100 border-none rounded-2xl font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all" value={formData.model} onChange={e => setFormData({...formData, model: e.target.value})} placeholder="e.g. Pavilion G5" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Job Status</label>
+                  <select className="w-full p-4 bg-indigo-50 border-none rounded-2xl font-black text-indigo-600 appearance-none focus:ring-2 focus:ring-indigo-500 transition-all" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condition / Fault</label>
+                <select className="w-full p-4 bg-slate-100 border-none rounded-2xl font-bold text-slate-800 appearance-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all" value={formData.initialCondition} onChange={e => setFormData({...formData, initialCondition: e.target.value})}>
+                  {CONDITION_PRESETS.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="Manual Entry">Enter Custom Fault...</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Technical Log (Steps Taken)</label>
+                <text
