@@ -3,81 +3,276 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TechLog Pro | Executive Console</title>
+    <title>TechLog Pro | Executive Workshop Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .modal-active { overflow: hidden; }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+<body class="bg-slate-50 text-slate-900 selection:bg-indigo-100">
 
-    <nav class="bg-white border-b px-6 py-4 sticky top-0 z-40 shadow-sm flex justify-between items-center">
-        <h1 class="text-xl font-black uppercase tracking-tight">TechLog<span class="text-indigo-600">Pro</span></h1>
-        <button onclick="openModal()" class="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg hover:bg-indigo-700 transition">
-            + New Log
-        </button>
+    <nav class="bg-white border-b px-6 py-4 sticky top-0 z-40 flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 p-2.5 rounded-2xl shadow-lg shadow-indigo-200">
+                <i data-lucide="wrench" class="text-white w-5 h-5"></i>
+            </div>
+            <h1 class="text-xl font-black tracking-tight text-slate-800 uppercase">TechLog<span class="text-indigo-600">Pro</span></h1>
+        </div>
+        
+        <div class="relative w-full md:w-1/3">
+            <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"></i>
+            <input 
+                id="searchInput"
+                class="w-full pl-12 pr-4 py-3 bg-slate-100 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500 font-bold text-sm transition-all" 
+                placeholder="Search by name or model..."
+            >
+        </div>
     </nav>
 
-    <main class="max-w-4xl mx-auto p-6">
-        <div id="log-list" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <main class="max-w-7xl mx-auto px-4 md:px-6 py-6">
+        <div id="statsRow" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            </div>
+
+        <div class="flex gap-8 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
+            <button onclick="switchTab('workshop')" id="tab-workshop" class="pb-4 font-black text-xs uppercase tracking-widest flex items-center gap-2 border-b-2 border-indigo-600 text-indigo-600">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Workshop View
+            </button>
+            <button onclick="switchTab('history')" id="tab-history" class="pb-4 font-black text-xs uppercase tracking-widest flex items-center gap-2 border-b-2 border-transparent text-slate-400">
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Repair History
+            </button>
+        </div>
+
+        <div id="logGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             </div>
     </main>
 
-    <div id="modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl">
-            <h2 class="text-2xl font-black mb-6">Repair Intake</h2>
-            <form id="logForm" class="space-y-4">
-                <input id="customerName" required placeholder="Client Name" class="w-full p-4 bg-slate-100 rounded-2xl outline-none">
-                <input id="brand" placeholder="Brand" class="w-full p-4 bg-slate-100 rounded-2xl outline-none">
-                <textarea id="notes" placeholder="Initial Condition..." class="w-full p-4 bg-slate-100 rounded-2xl outline-none"></textarea>
-                <div class="flex gap-4">
-                    <button type="button" onclick="closeModal()" class="flex-1 p-4 bg-slate-200 rounded-2xl font-bold">Cancel</button>
-                    <button type="submit" class="flex-1 p-4 bg-indigo-600 text-white rounded-2xl font-bold">Save Record</button>
+    <button onclick="openModal()" class="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-[2rem] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all z-50 ring-4 ring-white">
+        <i data-lucide="plus" class="w-9 h-9" stroke-width="3"></i>
+    </button>
+
+    <div id="modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[60] hidden flex items-end md:items-center justify-center">
+        <div class="bg-white w-full max-w-2xl h-[92vh] md:h-auto md:max-h-[90vh] rounded-t-[3rem] md:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-8 border-b flex justify-between items-center">
+                <div>
+                    <h2 id="modalTitle" class="text-2xl font-black text-slate-800">New Repair Job</h2>
+                    <p class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-1">Job Intake Protocol</p>
                 </div>
+                <button onclick="closeModal()" class="p-3 hover:bg-slate-100 rounded-2xl transition-colors"><i data-lucide="x"></i></button>
+            </div>
+            
+            <form id="repairForm" class="p-8 overflow-y-auto space-y-6 flex-grow">
+                <input type="hidden" id="editId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Customer Name</label>
+                        <input id="customerName" required class="w-full p-4 bg-slate-100 rounded-2xl font-bold" placeholder="Full Name">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+                        <input id="customerPhone" class="w-full p-4 bg-slate-100 rounded-2xl font-bold" placeholder="+234...">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Device Model</label>
+                        <input id="model" required class="w-full p-4 bg-slate-100 rounded-2xl font-bold" placeholder="e.g. Pavilion G5">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Job Status</label>
+                        <select id="status" class="w-full p-4 bg-indigo-50 rounded-2xl font-black text-indigo-600">
+                            <option>Received</option>
+                            <option>In Diagnosis</option>
+                            <option>Parts Pending</option>
+                            <option>Repairing</option>
+                            <option>Ready for Pickup</option>
+                            <option>Completed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Technical Notes</label>
+                    <textarea id="stepsTaken" rows="3" class="w-full p-4 bg-slate-100 rounded-2xl font-bold" placeholder="Describe diagnosis or repair steps..."></textarea>
+                </div>
+                <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-indigo-200">Save Log Entry</button>
             </form>
         </div>
     </div>
 
-    <script>
-        let logs = JSON.parse(localStorage.getItem('techLogs')) || [];
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        function render() {
-            const list = document.getElementById('log-list');
-            list.innerHTML = logs.map((l, i) => `
-                <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
-                    <h3 class="text-lg font-black">${l.customerName}</h3>
-                    <p class="text-indigo-600 font-bold text-sm">${l.brand}</p>
-                    <p class="text-slate-500 text-xs mt-2 italic">"${l.notes}"</p>
-                    <button onclick="deleteLog(${i})" class="mt-4 text-rose-500 text-xs font-black uppercase">Delete</button>
-                </div>
-            `).join('');
+        // Configuration (Note: Ensure your environment variables are set or hardcoded carefully)
+        const firebaseConfig = { /* PASTE YOUR FIREBASE CONFIG OBJECT HERE */ };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const APP_ID = 'tech-logbook-pro-v2';
+
+        let repairs = [];
+        let currentTab = 'workshop';
+
+        // Initialization
+        async function init() {
+            const userCredential = await signInAnonymously(auth);
+            const user = userCredential.user;
+            
+            const q = query(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'repairs'), orderBy('createdAt', 'desc'));
+            onSnapshot(q, (snapshot) => {
+                repairs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                render();
+            });
         }
 
-        document.getElementById('logForm').onsubmit = (e) => {
-            e.preventDefault();
-            const newLog = {
-                customerName: document.getElementById('customerName').value,
-                brand: document.getElementById('brand').value,
-                notes: document.getElementById('notes').value
-            };
-            logs.unshift(newLog);
-            localStorage.setItem('techLogs', JSON.stringify(logs));
-            closeModal();
+        // Render Functions
+        window.render = () => {
+            const grid = document.getElementById('logGrid');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            
+            const filtered = repairs.filter(r => {
+                const matchesSearch = (r.customerName + r.model).toLowerCase().includes(search);
+                const isComplete = r.status === 'Completed';
+                return matchesSearch && (currentTab === 'history' ? isComplete : !isComplete);
+            });
+
+            grid.innerHTML = filtered.map(log => `
+                <div class="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all cursor-pointer group active:scale-[0.98]" onclick="editLog('${log.id}')">
+                    <div class="flex justify-between items-start mb-4">
+                        <span class="text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest bg-indigo-100 text-indigo-700">
+                            ${log.status}
+                        </span>
+                        <button onclick="event.stopPropagation(); generateReceipt('${log.id}')" class="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-indigo-600 hover:text-white">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <h3 class="text-xl font-black text-slate-800 truncate mb-1">${log.customerName}</h3>
+                    <div class="text-indigo-600 font-bold text-[11px] uppercase tracking-widest mb-4">
+                        ${log.model}
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-2xl text-xs text-slate-500 italic border border-slate-100 line-clamp-2">
+                        "${log.stepsTaken || 'No notes added yet'}"
+                    </div>
+                </div>
+            `).join('');
+
+            updateStats();
+            lucide.createIcons();
+        };
+
+        function updateStats() {
+            const active = repairs.filter(r => r.status !== 'Completed');
+            const statsRow = document.getElementById('statsRow');
+            if (currentTab === 'history') { statsRow.classList.add('hidden'); return; }
+            statsRow.classList.remove('hidden');
+
+            const stats = [
+                { label: 'Active Jobs', val: active.length, icon: 'activity', color: 'blue' },
+                { label: 'Incoming', val: active.filter(r => r.status === 'Received').length, icon: 'alert-circle', color: 'rose' },
+                { label: 'Ready', val: active.filter(r => r.status === 'Ready for Pickup').length, icon: 'check-circle-2', color: 'emerald' }
+            ];
+
+            statsRow.innerHTML = stats.map(s => `
+                <div class="bg-white p-5 rounded-[2rem] border border-slate-200 flex items-center gap-4 shadow-sm">
+                    <div class="bg-${s.color}-50 p-3 rounded-2xl text-${s.color}-600"><i data-lucide="${s.icon}" class="w-5 h-5"></i></div>
+                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${s.label}</p><p class="text-xl font-black">${s.val}</p></div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // Actions
+        window.switchTab = (tab) => {
+            currentTab = tab;
+            document.getElementById('tab-workshop').className = `pb-4 font-black text-xs uppercase tracking-widest flex items-center gap-2 border-b-2 ${tab === 'workshop' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`;
+            document.getElementById('tab-history').className = `pb-4 font-black text-xs uppercase tracking-widest flex items-center gap-2 border-b-2 ${tab === 'history' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`;
             render();
         };
 
-        function deleteLog(index) {
-            logs.splice(index, 1);
-            localStorage.setItem('techLogs', JSON.stringify(logs));
-            render();
-        }
+        window.openModal = () => {
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('modal').classList.add('flex');
+            document.getElementById('repairForm').reset();
+            document.getElementById('editId').value = '';
+            document.getElementById('modalTitle').innerText = 'New Repair Job';
+        };
 
-        const openModal = () => document.getElementById('modal').classList.remove('hidden');
-        const closeModal = () => document.getElementById('modal').classList.add('hidden');
-        
-        render();
+        window.closeModal = () => {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('modal').classList.remove('flex');
+        };
+
+        window.editLog = (id) => {
+            const log = repairs.find(r => r.id === id);
+            if (!log) return;
+            openModal();
+            document.getElementById('editId').value = log.id;
+            document.getElementById('customerName').value = log.customerName;
+            document.getElementById('customerPhone').value = log.customerPhone;
+            document.getElementById('model').value = log.model;
+            document.getElementById('status').value = log.status;
+            document.getElementById('stepsTaken').value = log.stepsTaken;
+            document.getElementById('modalTitle').innerText = 'Update Entry';
+        };
+
+        document.getElementById('repairForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editId').value;
+            const user = auth.currentUser;
+            const data = {
+                customerName: document.getElementById('customerName').value,
+                customerPhone: document.getElementById('customerPhone').value,
+                model: document.getElementById('model').value,
+                status: document.getElementById('status').value,
+                stepsTaken: document.getElementById('stepsTaken').value,
+                updatedAt: new Date()
+            };
+
+            if (id) {
+                await updateDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'repairs', id), data);
+            } else {
+                data.createdAt = new Date();
+                await addDoc(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'repairs'), data);
+            }
+            closeModal();
+        };
+
+        document.getElementById('searchInput').oninput = () => render();
+
+        // Receipt Generation (Native Canvas API)
+        window.generateReceipt = (id) => {
+            const log = repairs.find(r => r.id === id);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 600; canvas.height = 800;
+
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,600,800);
+            ctx.fillStyle = '#4f46e5'; ctx.fillRect(0,0,600,15);
+            
+            ctx.fillStyle = '#1e293b'; ctx.font = 'bold 30px sans-serif'; ctx.fillText('SERVICE RECEIPT', 40, 70);
+            ctx.fillStyle = '#6366f1'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('TECHLOG PROFESSIONAL SYSTEMS', 40, 95);
+            
+            ctx.fillStyle = '#f8fafc'; ctx.roundRect ? ctx.roundRect(40, 130, 520, 60, 15) : ctx.fillRect(40, 130, 520, 60);
+            ctx.fill();
+            
+            ctx.fillStyle = '#1e293b'; ctx.font = 'bold 18px sans-serif'; ctx.fillText(log.status.toUpperCase(), 60, 168);
+            
+            ctx.fillStyle = '#64748b'; ctx.font = 'bold 10px sans-serif'; 
+            ctx.fillText('CUSTOMER', 40, 230); ctx.fillText('DEVICE', 300, 230);
+            
+            ctx.fillStyle = '#0f172a'; ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(log.customerName, 40, 260); ctx.fillText(log.model, 300, 260);
+
+            const link = document.createElement('a');
+            link.download = `Receipt_${log.customerName}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        };
+
+        init();
     </script>
 </body>
-    </html>
-                        
+                    </html>
+        
